@@ -45,7 +45,7 @@ def main(args):
     n_iterations_target_not_in_topk, n_retry_final = 25, 1
     
     tokenizer, max_token_value = targetLM.model.tokenizer, targetLM.model.tokenizer.vocab_size
-    
+    print(f"prompt_template is: {args.prompt_template}")
     orig_msg = get_universal_manual_prompt(args.prompt_template, args.target_str, args.goal_modified.lower())
     print(f'Original message: {orig_msg}')
 
@@ -92,6 +92,8 @@ Want opción 형-{ greens '''
             adv_init = ' !' * args.n_tokens_adv
     best_adv_tokens = adv_tokens = tokenizer.encode(adv_init)  #[:args.n_tokens_adv] 
     
+
+    # Give itself multiple tries. In case this fails, we go back to the original question
     for i_restart in range(args.n_restarts):    
         early_stop_rs = False
         n_chars_change, n_tokens_change = args.n_chars_change_max, args.n_tokens_change_max
@@ -143,7 +145,7 @@ Want opción 형-{ greens '''
                     n_retry_final = 1
                     break
             
-            # try a different substitution
+            # Try a different substitution, either randomly changing chars or tokens
             if args.n_chars_change_max > 0:
                 if args.schedule_prob:
                     n_chars_change = schedule_n_to_change_prob(args.n_chars_change_max, np.exp(best_logprob), targetLM)
@@ -168,7 +170,8 @@ Want opción 형-{ greens '''
             # apply the new adversarial suffix
             msg = insert_adv_string(orig_msg, adv) 
 
-        if not args.eval_only_rs and i_restart == 0:  # eval only if it's the first restart
+        # eval only if it's the first restart. Normally not true.
+        if not args.eval_only_rs and i_restart == 0:  
             # the outputs of some LLMs are non-determinstic, thus we might need to do extra work to ensure that the final response starts from "Sure"
             for i in range(n_retry_final):
                 temperature = 0.0 if args.determinstic_jailbreak else 1.0
@@ -191,6 +194,7 @@ Want opción 형-{ greens '''
             noadv_response_text, llm_judge_score_noadv, jailbroken_noadv_judge_llm, jailbroken_noadv_judge_rule = '', -1, -1, -1
             orig_response_text, llm_judge_score_orig, jailbroken_orig_judge_llm, jailbroken_orig_judge_rule = '', -1, -1, -1
 
+        # Not true for llama-2
         if not early_stop_rs:
             for i in range(n_retry_final):
                 # if we didn't find a jailbreak, then use temperature=1 to possibly find it within `n_retry_final` restarts
